@@ -88,14 +88,4 @@ Sky Alert implements a **Client-Server-API** pattern but retains the flexibility
 
 -----
 
-
-## 👤 Author
-
-**Swapnil Singh**
-
-  * **GitHub:** [@swapnilsing](https://github.com/swapnilsing)
-  * **Project Link:** [https://github.com/swapnilsing/sky-alert](https://www.google.com/search?q=https://github.com/swapnilsing/sky-alert)
-
------
-
 *© 2025 Sky Alert. Distributed under the MIT License.*
