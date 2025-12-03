@@ -1,0 +1,1690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sky Alert | Advanced Weather & Profile</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js" type="module"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js" type="module"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js" type="module"></script>
+
+    <style>
+        :root {
+            --bg-dark: #0a192f;
+            --card-bg: rgba(17, 34, 64, 0.75);
+            --accent: #64ffda;
+            --text-main: #e6f1ff;
+            --text-muted: #8892b0;
+            --error: #ef4444;
+            --modal-bg: #020c1b;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            color: var(--text-main);
+            min-height: 100vh;
+            overflow-x: hidden;
+            position: relative;
+            background-color: var(--bg-dark);
+        }
+
+        /* --- INTRO ANIMATION STYLES --- */
+        #intro-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: #020c1b; /* Deepest dark matching your theme */
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.8s ease-in-out, visibility 0.8s;
+        }
+
+        #intro-overlay.finished {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        /* Icon Animation: Zoom in with Blur to Clear */
+        .intro-icon-anim {
+            opacity: 0;
+            animation: icon-strike 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+
+        @keyframes icon-strike {
+            0% { opacity: 0; transform: scale(3); filter: blur(20px); }
+            100% { opacity: 1; transform: scale(1); filter: blur(0px); }
+        }
+
+        /* Text Animation: Wide Spacing to Tight */
+        .intro-text-anim {
+            opacity: 0;
+            animation: text-cinematic 1.5s cubic-bezier(0.22, 1, 0.36, 1) 0.5s forwards; /* 0.5s delay */
+        }
+
+        @keyframes text-cinematic {
+            0% { 
+                opacity: 0; 
+                transform: translateY(20px) scale(0.9); 
+                letter-spacing: 1.5rem; 
+            }
+            100% { 
+                opacity: 1; 
+                transform: translateY(0) scale(1); 
+                letter-spacing: -0.05em; 
+            }
+        }
+
+        /* Subtle glow pulse for the finished logo */
+        .intro-glow {
+            animation: glow-pulse 2s infinite alternate;
+        }
+        @keyframes glow-pulse {
+            from { text-shadow: 0 0 10px rgba(0, 198, 255, 0.2); }
+            to { text-shadow: 0 0 30px rgba(0, 198, 255, 0.6), 0 0 10px rgba(255, 255, 255, 0.4); }
+        }
+
+        /* --- BACKGROUND LAYER SYSTEM --- */
+        #bg-container {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: -50;
+            overflow: hidden;
+        }
+
+        .bg-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-size: cover;
+            background-position: center;
+            opacity: 0;
+            transition: opacity 1.5s ease-in-out;
+            transform-origin: center;
+        }
+        .bg-layer.active { opacity: 1; }
+
+        .ken-burns { animation: moveBackground 40s alternate infinite ease-in-out; }
+        @keyframes moveBackground {
+            0% { transform: scale(1) translate(0, 0); }
+            100% { transform: scale(1.15) translate(-2%, -2%); }
+        }
+
+        #bg-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: -40;
+            background: linear-gradient(to bottom, rgba(10, 25, 47, 0.6), rgba(10, 25, 47, 0.85));
+            pointer-events: none;
+        }
+
+        #lightning-flash {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(255, 255, 255, 0.2);
+            z-index: -39;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.1s ease-out;
+        }
+
+        #weather-canvas {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: -38;
+            pointer-events: none;
+        }
+
+        /* --- UI COMPONENTS --- */
+        .glass-panel {
+            background-color: var(--card-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+            transition: all 0.3s ease;
+        }
+        .glass-panel:hover {
+            border-color: var(--accent);
+            transform: translateY(-2px);
+            box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.6);
+        }
+
+        .auth-modal-content {
+            background-color: var(--modal-bg);
+            border: 1px solid #1e293b;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.7);
+        }
+        
+        .auth-input {
+            width: 100%;
+            background-color: #0f172a;
+            border: 1px solid #1e293b;
+            color: #cbd5e1;
+            padding: 0.85rem 1rem 0.85rem 2.8rem;
+            border-radius: 0.5rem;
+            outline: none;
+            transition: all 0.3s;
+            font-size: 0.95rem;
+        }
+        .auth-input:focus {
+            border-color: var(--accent);
+            background-color: #151f32;
+            box-shadow: 0 0 0 1px rgba(100, 255, 218, 0.1);
+        }
+        .auth-icon {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #64748b;
+            pointer-events: none;
+            transition: color 0.3s;
+        }
+        .auth-input:focus + .auth-icon { color: var(--accent); }
+        
+        .btn-auth {
+            background-color: var(--accent);
+            color: #020c1b;
+            font-weight: 700;
+            padding: 0.9rem;
+            border-radius: 0.5rem;
+            width: 100%;
+            transition: all 0.3s;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(100, 255, 218, 0.2);
+            text-transform: capitalize;
+            letter-spacing: 0.5px;
+        }
+        .btn-auth:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 12px rgba(100, 255, 218, 0.3);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent) 0%, #48d1cc 100%);
+            color: #0a192f; font-weight: 700; padding: 0.75rem; border-radius: 0.5rem; width: 100%; transition: opacity 0.3s; cursor: pointer;
+            box-shadow: 0 4px 15px rgba(100, 255, 218, 0.3);
+        }
+        .btn-primary:hover { opacity: 0.9; box-shadow: 0 6px 20px rgba(100, 255, 218, 0.5); }
+        
+        .btn-outline {
+            background: transparent; border: 1px solid var(--accent); color: var(--accent); font-weight: 700;
+            padding: 0.75rem; border-radius: 0.5rem; width: 100%; transition: all 0.3s; cursor: pointer;
+        }
+        .btn-outline:hover { background: rgba(100, 255, 218, 0.1); }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(100, 255, 218, 0.3); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+        /* Toggle Switch */
+        .toggle-checkbox:checked { right: 0; border-color: var(--accent); }
+        .toggle-checkbox:checked + .toggle-label { background-color: var(--accent); }
+
+        /* Animations */
+        @keyframes fade-in-up {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in-up { animation: fade-in-up 0.5s ease-out forwards; }
+        
+        .mic-listening {
+            animation: pulse-red 1.5s infinite;
+            background-color: #ef4444 !important;
+            color: white !important;
+            border-color: #ef4444 !important;
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.6);
+        }
+        @keyframes pulse-red {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { transform: scale(1.1); box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+
+        @keyframes soft-pulse {
+            0% { transform: scale(1); box-shadow: 0 4px 15px rgba(100, 255, 218, 0.3); }
+            50% { transform: scale(1.02); box-shadow: 0 6px 20px rgba(100, 255, 218, 0.5); }
+            100% { transform: scale(1); box-shadow: 0 4px 15px rgba(100, 255, 218, 0.3); }
+        }
+        .animate-pulse-btn { animation: soft-pulse 2s infinite ease-in-out; }
+
+        .text-weather-gradient {
+            background: linear-gradient(to right, #00c6ff, #0072ff, #fce38a, #f38181);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            color: transparent;
+            background-size: 300% auto;
+            animation: weather-shine 6s linear infinite;
+        }
+        @keyframes weather-shine { to { background-position: 300% center; } }
+
+        .animate-weather-float {
+            animation: float-weather 5s ease-in-out infinite;
+            display: inline-block;
+        }
+        @keyframes float-weather {
+            0%, 100% { transform: translateY(0) rotate(0deg); filter: drop-shadow(0 5px 15px rgba(0, 198, 255, 0.3)); }
+            50% { transform: translateY(-15px) rotate(3deg); filter: drop-shadow(0 20px 20px rgba(0, 198, 255, 0.5)); }
+        }
+        
+        /* New Animations */
+        @keyframes bounce-custom {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); color: var(--accent); }
+        }
+        .animate-location-bounce {
+            animation: bounce-custom 2s infinite;
+        }
+
+        @keyframes card-enter {
+            from { opacity: 0; transform: translateY(30px) scale(0.95); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .card-stagger {
+            opacity: 0;
+            animation: card-enter 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        .delay-1 { animation-delay: 0.1s; }
+        .delay-2 { animation-delay: 0.2s; }
+        .delay-3 { animation-delay: 0.3s; }
+        .delay-4 { animation-delay: 0.4s; }
+
+        /* Floating Mic Button */
+        .fab-voice {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            width: 3.5rem;
+            height: 3.5rem;
+            border-radius: 50%;
+            background: rgba(10, 25, 47, 0.8);
+            backdrop-filter: blur(10px);
+            border: 2px solid var(--accent);
+            color: var(--accent);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            z-index: 100;
+        }
+        .fab-voice:hover {
+            transform: scale(1.1) translateY(-5px);
+            background: var(--accent);
+            color: var(--bg-dark);
+            box-shadow: 0 15px 35px rgba(100, 255, 218, 0.4);
+        }
+
+        /* Ensure dropdowns are on top */
+        #profile-dropdown { z-index: 60; }
+        .z-60 { z-index: 60; }
+
+        /* Dynamic Dashboard Hover Effects */
+        .dashboard-card-hover {
+            transition: all 0.4s ease;
+        }
+        .dashboard-card-hover:hover {
+            transform: translateY(-5px) scale(1.02);
+            border-color: rgba(100, 255, 218, 0.5);
+            background: rgba(23, 42, 69, 0.9);
+        }
+
+        /* Horizon Gradient for Sun Card */
+        .horizon-gradient {
+            background: linear-gradient(to top, rgba(253, 224, 71, 0.1) 0%, transparent 50%);
+        }
+    </style>
+</head>
+<body class="flex flex-col">
+
+    <div id="intro-overlay">
+        <div class="relative flex flex-col items-center justify-center gap-6">
+            <div class="intro-icon-anim text-9xl text-accent drop-shadow-[0_0_15px_rgba(100,255,218,0.5)]">
+                <i class="fa-solid fa-cloud-bolt"></i>
+            </div>
+            
+            <h1 class="intro-text-anim text-7xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#00c6ff] via-[#0072ff] to-[#00c6ff] bg-[length:200%_auto] animate-gradient-x tracking-tighter intro-glow">
+                SKY ALERT
+            </h1>
+            
+            <p class="intro-text-anim text-blue-300/50 text-sm font-mono tracking-[0.3em] uppercase mt-4">
+                Initializing Intelligence
+            </p>
+        </div>
+    </div>
+
+    <div id="bg-container"></div>
+    <div id="bg-overlay"></div>
+    <div id="lightning-flash"></div>
+    <canvas id="weather-canvas"></canvas>
+
+    <div id="landing-page" class="min-h-screen flex flex-col items-center justify-center p-4 z-50">
+        <div class="glass-panel max-w-lg w-full p-10 rounded-3xl text-center space-y-8 animate-fade-in-up border border-white/10">
+            <div class="space-y-4">
+                <div class="inline-block p-2 rounded-full mb-2 animate-weather-float">
+                    <i class="fa-solid fa-cloud-bolt text-8xl text-weather-gradient"></i>
+                </div>
+                <div>
+                    <h1 class="text-6xl font-extrabold tracking-tighter text-weather-gradient pb-2">SKYALERT</h1>
+                    <p class="text-gray-300 mt-2 text-lg font-light tracking-wide">Advanced Weather Intelligence</p>
+                </div>
+            </div>
+
+            <div class="space-y-4 pt-4">
+                <button onclick="openModal('signup-modal')" class="btn-primary text-lg animate-pulse-btn">Get Started</button>
+                <button onclick="openModal('login-modal')" class="btn-outline text-lg">I already have an account</button>
+            </div>
+            
+            <p class="text-xs text-gray-500 mt-6">By continuing, you agree to our Terms of Service.</p>
+        </div>
+    </div>
+
+    <div id="app-interface" class="hidden flex flex-col min-h-screen">
+        <nav class="sticky top-0 z-40 glass-panel border-b border-white/5">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex items-center justify-between h-16">
+                    <div class="flex items-center gap-2 cursor-pointer" onclick="window.location.reload()">
+                        <i class="fa-solid fa-cloud-bolt text-accent text-2xl"></i>
+                        <span class="font-bold text-xl tracking-wider text-white">SKY<span class="text-accent">ALERT</span></span>
+                    </div>
+
+                    <div class="hidden md:block flex-1 max-w-md mx-8">
+                        <form id="nav-search-form" class="relative group">
+                            <input type="text" id="nav-search-input" placeholder="Search city..." 
+                                class="w-full bg-[#112240]/80 text-white rounded-full py-2 px-10 pr-16 focus:outline-none focus:ring-2 focus:ring-[#64ffda] border border-gray-700 transition-all placeholder-gray-500">
+                            
+                            <button type="submit" class="absolute left-3 top-2.5 text-gray-400 group-hover:text-accent transition-colors">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                            </button>
+
+                            <button type="button" onclick="getUserLocation()" class="absolute right-3 top-2 text-gray-400 hover:text-accent transition-all hover:scale-110" title="Use my location">
+                                <i class="fa-solid fa-location-crosshairs text-lg"></i>
+                            </button>
+                        </form>
+                    </div>
+
+                    <div class="flex items-center gap-4">
+                        <div class="hidden sm:flex items-center gap-2">
+                            <span class="text-xs font-bold text-gray-400">°C</span>
+                            <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
+                                <input type="checkbox" name="toggle" id="unit-toggle" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer transform transition-transform duration-200 ease-in-out left-0"/>
+                                <label for="unit-toggle" class="toggle-label block overflow-hidden h-5 rounded-full bg-gray-700 cursor-pointer"></label>
+                            </div>
+                            <span class="text-xs font-bold text-gray-400">°F</span>
+                        </div>
+
+                        <div id="user-menu" class="relative flex items-center gap-3">
+                            <span id="user-email-display" class="hidden md:block text-sm text-gray-300 font-medium"></span>
+                            <button onclick="toggleProfileDropdown()" id="nav-avatar" class="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-500 to-accent flex items-center justify-center text-bg-dark font-bold text-sm hover:ring-2 hover:ring-white transition-all shadow-lg">
+                                U
+                            </button>
+                            <div id="profile-dropdown" class="hidden absolute right-0 top-12 w-56 bg-[#0a192f] border border-gray-700 rounded-xl shadow-2xl py-2 z-50 ring-1 ring-white/10">
+                                <div class="px-4 py-3 border-b border-gray-700">
+                                    <p class="text-xs text-gray-400">Signed in as</p>
+                                    <p class="text-sm font-bold text-white truncate" id="dropdown-email">user@example.com</p>
+                                </div>
+                                <a href="#" onclick="openProfile(); return false;" class="block px-4 py-2 hover:bg-[#233554] text-sm text-gray-200"><i class="fa-solid fa-user mr-2 text-accent"></i> My Profile</a>
+                                <a href="#" onclick="openSettings(); return false;" class="block px-4 py-2 hover:bg-[#233554] text-sm text-gray-200"><i class="fa-solid fa-gear mr-2 text-gray-400"></i> Settings</a>
+                                <div class="border-t border-gray-700 my-1"></div>
+                                <a href="#" onclick="handleLogout(); return false;" class="block px-4 py-2 hover:bg-[#233554] text-sm text-red-400"><i class="fa-solid fa-right-from-bracket mr-2"></i> Log Out</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="md:hidden pb-4">
+                    <form id="mobile-search-form" class="relative">
+                        <input type="text" id="mobile-search-input" placeholder="Search city..." 
+                            class="w-full bg-[#112240] text-white rounded-lg py-2 px-10 focus:outline-none focus:ring-1 focus:ring-[#64ffda] border border-gray-700">
+                        <button type="submit" class="absolute left-3 top-2.5 text-gray-400">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </nav>
+
+        <main class="flex-grow container mx-auto px-4 py-6 space-y-6 max-w-7xl z-10">
+            
+            <div id="error-banner" class="hidden bg-red-500/20 border border-red-500 rounded-lg p-4 flex items-center justify-between animate-fade-in backdrop-blur-md">
+                <div class="flex items-center gap-3">
+                    <i class="fa-solid fa-circle-exclamation text-red-500 text-xl"></i>
+                    <div>
+                        <h3 class="font-bold text-red-400" id="error-title">Connection Error</h3>
+                        <p id="error-text" class="text-sm text-gray-300">Could not connect to the backend server.</p>
+                    </div>
+                </div>
+                <button onclick="document.getElementById('error-banner').classList.add('hidden')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div id="demo-badge" class="hidden fixed bottom-6 left-6 bg-orange-600/90 text-white text-xs font-bold px-4 py-2 rounded-full backdrop-blur-md z-40 shadow-xl border border-orange-400/30 flex items-center gap-2 hover:scale-105 transition-transform">
+                <i class="fa-solid fa-database"></i> Demo Mode
+            </div>
+
+            <button id="fab-mic" onclick="startVoiceSearch()" class="fab-voice hidden md:flex" title="Voice Search">
+                <i class="fa-solid fa-microphone"></i>
+            </button>
+
+            <div id="alerts-container" class="hidden bg-red-900/40 border border-red-500/50 rounded-lg p-4 flex items-start gap-3 animate-pulse backdrop-blur-sm">
+                <i class="fa-solid fa-triangle-exclamation text-red-500 mt-1"></i>
+                <div>
+                    <h3 class="font-bold text-red-400">Weather Alert</h3>
+                    <p id="alert-text" class="text-sm text-gray-300">Heavy rain expected in the next 24 hours.</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                <div class="lg:col-span-2 glass-panel rounded-2xl p-6 md:p-8 relative overflow-hidden group dashboard-card-hover">
+                    <div class="absolute top-6 right-6 flex items-center gap-3 z-20">
+                        <button onclick="shareWeather()" class="text-gray-500 hover:text-accent transition-all hover:scale-110 active:scale-90" title="Share Weather">
+                            <i class="fa-solid fa-share-nodes text-2xl"></i>
+                        </button>
+                        <button onclick="toggleFavorite()" id="save-location-btn" class="text-gray-500 hover:text-red-500 transition-all hover:scale-110 active:scale-90" title="Save to Favorites">
+                            <i class="fa-solid fa-heart text-2xl"></i>
+                        </button>
+                    </div>
+
+                    <div class="flex flex-col md:flex-row justify-between items-center z-10 relative">
+                        <div class="space-y-2 text-center md:text-left">
+                            <div class="flex items-center justify-center md:justify-start gap-2 text-accent text-sm font-semibold tracking-wider uppercase">
+                                <i class="fa-solid fa-location-dot animate-location-bounce text-lg"></i>
+                                <span id="current-location">Locating...</span>
+                            </div>
+                            <div class="flex flex-col">
+                                <h1 id="current-temp" class="text-7xl md:text-8xl font-bold tracking-tighter text-white drop-shadow-lg">--°</h1>
+                                <p id="current-condition" class="text-xl md:text-2xl text-gray-300 font-light">--</p>
+                            </div>
+                            <p id="current-date" class="text-sm text-gray-400">--</p>
+                        </div>
+                        
+                        <div class="mt-6 md:mt-0 relative">
+                            <div class="absolute inset-0 bg-accent/20 blur-[60px] rounded-full"></div>
+                            <img id="weather-icon" src="https://cdn.weatherapi.com/weather/128x128/day/113.png" alt="Weather" class="relative w-40 h-40 md:w-56 md:h-56 object-contain filter drop-shadow-2xl hover:scale-110 transition-transform duration-500">
+                        </div>
+                    </div>
+
+                    <div class="mt-8 grid grid-cols-2 md:grid-cols-3 gap-y-6 gap-x-4 border-t border-white/10 pt-6">
+                        <div class="text-center md:text-left">
+                            <p class="text-xs text-gray-400 uppercase tracking-widest"><i class="fa-solid fa-wind mr-1"></i> Wind</p>
+                            <p id="wind-stat" class="text-lg font-semibold text-accent">--</p>
+                        </div>
+                        <div class="text-center md:text-left">
+                            <p class="text-xs text-gray-400 uppercase tracking-widest"><i class="fa-solid fa-droplet mr-1"></i> Humidity</p>
+                            <p id="humidity-stat" class="text-lg font-semibold text-accent">--%</p>
+                        </div>
+                        <div class="text-center md:text-left">
+                            <p class="text-xs text-gray-400 uppercase tracking-widest"><i class="fa-solid fa-temperature-half mr-1"></i> Feels Like</p>
+                            <p id="feels-like-stat" class="text-lg font-semibold text-accent">--°</p>
+                        </div>
+                        <div class="text-center md:text-left">
+                            <p class="text-xs text-gray-400 uppercase tracking-widest"><i class="fa-solid fa-sun mr-1"></i> UV Index</p>
+                            <p id="uv-stat" class="text-lg font-semibold text-accent">--</p>
+                        </div>
+                        <div class="text-center md:text-left">
+                            <p class="text-xs text-gray-400 uppercase tracking-widest"><i class="fa-solid fa-gauge-high mr-1"></i> Pressure</p>
+                            <p id="pressure-stat" class="text-lg font-semibold text-accent">-- mb</p>
+                        </div>
+                        <div class="text-center md:text-left">
+                            <p class="text-xs text-gray-400 uppercase tracking-widest"><i class="fa-solid fa-eye mr-1"></i> Visibility</p>
+                            <p id="visibility-stat" class="text-lg font-semibold text-accent">-- km</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-6">
+                    <div class="glass-panel rounded-2xl p-6 relative overflow-hidden group hover:border-accent transition-colors dashboard-card-hover min-h-[160px] flex flex-col justify-center">
+                        <div class="absolute top-[-10px] right-[-10px] w-20 h-20 bg-accent/20 rounded-full blur-xl group-hover:bg-accent/30 transition-all"></div>
+                        <div class="flex items-center gap-3 mb-3 relative z-10">
+                             <div class="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-300">
+                                <i class="fa-solid fa-circle-info"></i>
+                             </div>
+                             <h3 class="text-gray-300 font-bold uppercase tracking-wide text-xs">Insight</h3>
+                        </div>
+                        <p id="smart-insight-text" class="text-xl font-light text-white leading-relaxed relative z-10">"Loading Analysis..."</p>
+                    </div>
+
+                    <div class="glass-panel rounded-2xl p-6 flex flex-col justify-between min-h-[180px] dashboard-card-hover relative overflow-hidden">
+                        <div class="absolute inset-0 bg-gradient-to-br from-transparent to-black/30 pointer-events-none"></div>
+                        
+                        <div class="flex justify-between items-start relative z-10">
+                            <h3 class="text-gray-400 font-bold uppercase text-xs tracking-wider">Air Quality</h3>
+                            <i class="fa-solid fa-wind text-gray-500 text-lg"></i>
+                        </div>
+                        
+                        <div class="flex items-center gap-4 mt-2 relative z-10">
+                            <span id="aqi-value" class="text-6xl font-bold text-white tracking-tighter">--</span>
+                            <div class="flex flex-col">
+                                <span class="text-xs text-gray-400 uppercase mb-1">Status</span>
+                                <span id="aqi-status" class="px-2 py-1 rounded text-[10px] font-bold bg-gray-700 text-gray-300 uppercase tracking-wide">--</span>
+                            </div>
+                        </div>
+
+                        <div class="w-full bg-gray-800 h-2 rounded-full mt-4 overflow-hidden relative z-10">
+                            <div id="aqi-bar" class="h-full bg-accent w-0 transition-all duration-1000 rounded-full shadow-[0_0_10px_rgba(100,255,218,0.5)]"></div>
+                        </div>
+                    </div>
+
+                    <div class="glass-panel rounded-2xl p-6 min-h-[160px] flex flex-col justify-center gap-4 dashboard-card-hover relative overflow-hidden horizon-gradient">
+                        <div class="flex items-center justify-between border-b border-white/5 pb-3">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-lg bg-yellow-500/20 flex items-center justify-center text-yellow-400">
+                                    <i class="fa-regular fa-sun"></i>
+                                </div>
+                                <div>
+                                    <p class="text-[10px] text-gray-400 uppercase tracking-widest">Sunrise</p>
+                                    <p id="sunrise-time" class="font-bold text-lg text-white">--</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between pt-1">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center text-blue-300">
+                                    <i class="fa-regular fa-moon"></i>
+                                </div>
+                                <div>
+                                    <p class="text-[10px] text-gray-400 uppercase tracking-widest">Sunset</p>
+                                    <p id="sunset-time" class="font-bold text-lg text-white">--</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <section class="glass-panel rounded-2xl p-6 card-stagger delay-1">
+                <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+                    <i class="fa-regular fa-clock text-accent"></i> Hourly Forecast
+                </h3>
+                <div id="hourly-container" class="flex overflow-x-auto gap-4 pb-4 snap-x custom-scrollbar">
+                    <p class="text-gray-500 text-sm">Loading forecast data...</p>
+                </div>
+            </section>
+
+            <section class="glass-panel rounded-2xl p-6 card-stagger delay-2">
+                <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+                    <i class="fa-regular fa-calendar text-accent"></i> 7-Day Forecast
+                </h3>
+                <div id="daily-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <p class="text-gray-500 text-sm">Loading forecast data...</p>
+                </div>
+            </section>
+
+            <section id="advanced-dashboard" class="glass-panel rounded-2xl p-6 animate-fade-in-up card-stagger delay-3">
+                <h3 class="text-xl font-bold mb-6 flex items-center gap-2 text-white border-b border-white/10 pb-2">
+                    <i class="fa-solid fa-flask text-accent"></i> Advanced Dashboard
+                </h3>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-2 bg-[#0a192f]/50 rounded-xl p-4 border border-white/5 dashboard-card-hover">
+                        <h4 class="text-sm font-semibold text-gray-300 mb-4 flex items-center gap-2">
+                            <i class="fa-solid fa-chart-area text-accent"></i> Temperature Trend (Next 24 Hours)
+                        </h4>
+                        <div class="w-full h-64 relative">
+                            <canvas id="forecast-chart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="space-y-6">
+                        <div class="bg-[#0a192f]/50 rounded-xl p-4 border border-white/5 flex flex-col items-center justify-center h-auto text-center relative overflow-hidden dashboard-card-hover">
+                            <div class="absolute top-0 right-0 p-2 opacity-20">
+                                <i class="fa-regular fa-clock text-4xl text-accent"></i>
+                            </div>
+                            <h4 class="text-xs text-gray-400 uppercase tracking-widest mb-1">Local Time</h4>
+                            <div class="flex items-center justify-center gap-2">
+                                <div id="live-clock" class="text-3xl font-mono font-bold text-white tracking-widest">--:--:--</div>
+                                <div class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
+                            </div>
+                            <div id="live-date" class="text-xs text-accent mt-1">Detecting Timezone...</div>
+                        </div>
+
+                        <div class="bg-[#0a192f]/50 rounded-xl p-4 border border-white/5 flex items-center gap-4 dashboard-card-hover group">
+                            <div id="clothing-icon-container" class="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-300 text-2xl group-hover:rotate-12 transition-transform">
+                                <i class="fa-solid fa-shirt"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-xs text-gray-400 uppercase tracking-widest">Wear Check</h4>
+                                <p id="clothing-text" class="text-sm font-semibold text-white">Loading advice...</p>
+                            </div>
+                        </div>
+
+                        <div class="bg-[#0a192f]/50 rounded-xl p-4 border border-white/5 flex items-center gap-4 dashboard-card-hover group">
+                            <div id="moon-icon-container" class="w-12 h-12 rounded-full bg-yellow-500/10 flex items-center justify-center text-yellow-200 text-2xl group-hover:rotate-[-15deg] transition-transform">
+                                <i class="fa-solid fa-moon"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-xs text-gray-400 uppercase tracking-widest">Moon Phase</h4>
+                                <p id="moon-phase-text" class="text-sm font-semibold text-white">--</p>
+                                <p id="moon-illumination" class="text-[10px] text-gray-400">Illumination: --%</p>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <button onclick="speakWeather()" class="relative overflow-hidden rounded-xl border border-accent/30 bg-[#0a192f] p-4 text-center transition-all hover:border-accent hover:shadow-[0_0_20px_rgba(100,255,218,0.2)] group">
+                                <div class="mb-2 text-2xl text-accent group-hover:scale-110 transition-transform"><i class="fa-solid fa-volume-high"></i></div>
+                                <span class="text-xs font-bold uppercase tracking-widest text-white">Listen</span>
+                            </button>
+                            <button onclick="exportCSV()" class="relative overflow-hidden rounded-xl border border-white/10 bg-[#0a192f] p-4 text-center transition-all hover:border-white/30 hover:bg-white/5 group">
+                                <div class="mb-2 text-2xl text-white group-hover:scale-110 transition-transform"><i class="fa-solid fa-file-csv"></i></div>
+                                <span class="text-xs font-bold uppercase tracking-widest text-white">Export</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer class="text-center py-6 text-gray-400 text-sm relative z-10">
+            <p>&copy; 2025 Sky Alert. Powered by <a href="https://www.weatherapi.com/" target="_blank" class="hover:text-accent transition-colors">WeatherAPI.com</a></p>
+        </footer>
+    </div>
+
+    <div id="login-modal" class="fixed inset-0 z-50 hidden bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="auth-modal-content w-full max-w-sm p-8 rounded-xl relative animate-fade-in-up">
+            <button onclick="closeModal('login-modal')" class="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+            
+            <div class="text-center mb-8">
+                <div class="inline-flex items-center justify-center mb-4">
+                     <i class="fa-solid fa-right-to-bracket text-white text-2xl"></i>
+                </div>
+                <h2 class="text-2xl font-bold text-white mb-2">Welcome Back</h2>
+                <p class="text-sm text-gray-400">Please enter your details to sign in</p>
+            </div>
+            
+            <form id="login-form" class="space-y-4">
+                <div class="relative">
+                    <input type="email" id="login-email" class="auth-input" placeholder="Email Address" required>
+                    <i class="fa-solid fa-envelope auth-icon"></i>
+                </div>
+                <div class="relative">
+                    <input type="password" id="login-password" class="auth-input" placeholder="Password" required>
+                    <i class="fa-solid fa-lock auth-icon"></i>
+                </div>
+                
+                <div id="login-error" class="hidden text-red-400 text-xs text-center bg-red-900/20 p-2 rounded border border-red-500/30"></div>
+
+                <button type="submit" class="btn-auth">Sign In</button>
+            </form>
+            
+            <div class="text-center text-xs text-gray-500 mt-6">
+                <p>Don't have an account? <a href="#" onclick="closeModal('login-modal'); openModal('signup-modal')" class="text-accent hover:text-white transition-colors">Sign up now</a></p>
+            </div>
+        </div>
+    </div>
+
+    <div id="signup-modal" class="fixed inset-0 z-50 hidden bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="auth-modal-content w-full max-w-sm p-8 rounded-xl relative animate-fade-in-up">
+            <button onclick="closeModal('signup-modal')" class="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+            
+            <div class="text-center mb-6">
+                <div class="inline-flex items-center justify-center mb-4">
+                    <i class="fa-solid fa-user-plus text-white text-2xl"></i>
+                </div>
+                <h2 class="text-2xl font-bold text-white mb-2">Create Account</h2>
+                <p class="text-sm text-gray-400">Join Sky Alert for personalized forecasts</p>
+            </div>
+            
+            <form id="signup-form" class="space-y-4">
+                <div class="relative">
+                    <input type="text" id="signup-name" class="auth-input" placeholder="Full Name" required>
+                    <i class="fa-solid fa-user auth-icon"></i>
+                </div>
+                <div class="relative">
+                    <input type="email" id="signup-email" class="auth-input" placeholder="Email Address" required>
+                    <i class="fa-solid fa-envelope auth-icon"></i>
+                </div>
+                <div class="relative">
+                    <input type="password" id="signup-pass" class="auth-input" placeholder="Password (min 6 chars)" required minlength="6">
+                    <i class="fa-solid fa-lock auth-icon"></i>
+                </div>
+                <div class="relative">
+                    <input type="password" id="signup-confirm" class="auth-input" placeholder="Confirm Password" required>
+                    <i class="fa-solid fa-shield-halved auth-icon"></i>
+                </div>
+
+                <div id="signup-error" class="hidden text-red-400 text-xs text-center bg-red-900/20 p-2 rounded border border-red-500/30"></div>
+
+                <button type="submit" class="btn-auth">Create Account</button>
+            </form>
+            
+            <div class="text-center text-xs text-gray-500 mt-6">
+                <p>Already have an account? <a href="#" onclick="closeModal('signup-modal'); openModal('login-modal')" class="text-accent hover:text-white transition-colors">Log in</a></p>
+            </div>
+        </div>
+    </div>
+
+    <div id="profile-modal" class="fixed inset-0 z-50 hidden bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="glass-panel w-full max-w-2xl p-0 rounded-2xl relative shadow-2xl max-h-[90vh] overflow-hidden flex flex-col border border-white/10">
+            <div class="relative bg-gradient-to-r from-blue-900/80 to-[#112240]/80 p-8 pb-12 backdrop-blur-sm">
+                <button onclick="closeModal('profile-modal')" class="absolute top-4 right-4 text-gray-300 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+                <div class="flex flex-col md:flex-row items-center gap-6">
+                    <div id="profile-avatar-lg" class="w-24 h-24 rounded-full bg-gradient-to-tr from-accent to-blue-500 flex items-center justify-center text-4xl font-bold text-[#0a192f] shadow-xl border-4 border-[#0a192f]">
+                        U
+                    </div>
+                    <div class="text-center md:text-left">
+                        <h2 class="text-2xl font-bold text-white" id="profile-name-display">User Name</h2>
+                        <p class="text-gray-300" id="profile-email-display">user@example.com</p>
+                        <p class="text-xs text-accent mt-2 uppercase tracking-wide font-bold">Free Plan</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-8 overflow-y-auto flex-grow bg-[#0a192f]/90">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-lg font-bold flex items-center gap-2">
+                        <i class="fa-solid fa-heart text-red-500"></i> Saved Locations
+                    </h3>
+                    <span id="fav-count" class="text-xs bg-gray-700 px-2 py-1 rounded text-gray-300">0 Cities</span>
+                </div>
+                
+                <div id="favorites-list" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <p class="text-gray-500 col-span-2 text-center py-8 bg-[#112240]/50 rounded-xl border border-dashed border-gray-700">
+                        No saved locations yet.<br>Search for a city and click the heart icon.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="settings-modal" class="fixed inset-0 z-50 hidden bg-black/80 backdrop-blur-md flex items-center justify-center">
+        <div class="glass-panel w-full max-w-md p-8 rounded-2xl relative border border-white/10">
+            <button onclick="closeModal('settings-modal')" class="absolute top-4 right-4 text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+            <h2 class="text-xl font-bold mb-4 text-accent">App Settings</h2>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm text-gray-400 mb-2">Data Source Mode</label>
+                    <select id="api-mode" class="w-full bg-[#0a192f] border border-gray-700 rounded p-2 text-white focus:border-accent outline-none">
+                        <option value="direct">Direct API (Client Side)</option>
+                        <option value="proxy">Use Python Backend (Proxy)</option>
+                    </select>
+                </div>
+
+                <div id="proxy-settings" class="space-y-2 hidden">
+                    <label class="block text-sm text-gray-400">Backend URL</label>
+                    <input type="text" id="backend-url" placeholder="http://127.0.0.1:5000" class="w-full bg-[#0a192f] border border-gray-700 rounded p-2 text-white text-xs">
+                    <p class="text-[10px] text-gray-500">Ensure app.py is running. If on Cloud, use full URL.</p>
+                </div>
+
+                <div id="direct-settings" class="space-y-2">
+                    <label class="block text-sm text-gray-400">WeatherAPI Key</label>
+                    <input type="password" id="direct-api-key" placeholder="6c52cf1143b14faab16172745251110 (Default)" class="w-full bg-[#0a192f] border border-gray-700 rounded p-2 text-white text-xs">
+                    <p class="text-[10px] text-gray-500">Key is stored in browser cache only.</p>
+                </div>
+
+                <button onclick="saveSettings()" class="w-full bg-accent text-[#0a192f] font-bold py-2 rounded mt-4 hover:opacity-90 transition-opacity">Save & Reload</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, signInWithCustomToken, signInAnonymously, updateProfile } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- 1. FIREBASE & MOCK CONFIGURATION ---
+        const manualFirebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT.firebaseapp.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT.appspot.com",
+            messagingSenderId: "SENDER_ID",
+            appId: "APP_ID"
+        };
+
+        let app, auth, db;
+        let useMock = false;
+        let appId = 'default-skyalert';
+
+        // Initialize with robust fallback
+        try {
+            let configToUse = null;
+            if (typeof __firebase_config !== 'undefined') {
+                configToUse = JSON.parse(__firebase_config);
+                appId = typeof __app_id !== 'undefined' ? __app_id : 'default-skyalert';
+            } 
+            else if (manualFirebaseConfig.apiKey !== "YOUR_API_KEY") {
+                configToUse = manualFirebaseConfig;
+            }
+
+            if (configToUse) {
+                app = initializeApp(configToUse);
+                auth = getAuth(app);
+                db = getFirestore(app);
+            } else {
+                console.warn("No Firebase Config found. Switching to MOCK MODE (Local Storage).");
+                useMock = true;
+                document.getElementById('demo-badge').classList.remove('hidden');
+            }
+        } catch (e) {
+            console.error("Firebase Init Error:", e);
+            useMock = true;
+            document.getElementById('demo-badge').classList.remove('hidden');
+        }
+
+        // --- 2. STATE ---
+        let currentUser = null;
+        let isCelsius = true;
+        let currentWeatherData = null;
+        let weatherChartInstance = null;
+        let clockInterval = null;
+        let cityTimeZone = null;
+        
+        let settings = {
+            mode: localStorage.getItem('sa_mode_v2') || 'direct', // Default to direct for better preview
+            backendUrl: localStorage.getItem('sa_backend_v2') || 'http://127.0.0.1:5000', 
+            apiKey: localStorage.getItem('sa_key') || ''
+        };
+
+        // UI Elements Cache
+        const els = {
+            landingPage: document.getElementById('landing-page'),
+            appInterface: document.getElementById('app-interface'),
+            navSearch: document.getElementById('nav-search-form'),
+            mobileSearch: document.getElementById('mobile-search-form'),
+            location: document.getElementById('current-location'),
+            temp: document.getElementById('current-temp'),
+            condition: document.getElementById('current-condition'),
+            date: document.getElementById('current-date'),
+            icon: document.getElementById('weather-icon'),
+            wind: document.getElementById('wind-stat'),
+            humidity: document.getElementById('humidity-stat'),
+            feelsLike: document.getElementById('feels-like-stat'),
+            uv: document.getElementById('uv-stat'),
+            pressure: document.getElementById('pressure-stat'),
+            visibility: document.getElementById('visibility-stat'),
+            smartText: document.getElementById('smart-insight-text'),
+            aqiVal: document.getElementById('aqi-value'),
+            aqiStatus: document.getElementById('aqi-status'),
+            aqiBar: document.getElementById('aqi-bar'),
+            alertsContainer: document.getElementById('alerts-container'),
+            alertText: document.getElementById('alert-text'),
+            hourly: document.getElementById('hourly-container'),
+            daily: document.getElementById('daily-container'),
+            saveBtn: document.getElementById('save-location-btn'),
+            sunrise: document.getElementById('sunrise-time'),
+            sunset: document.getElementById('sunset-time'),
+            userMenu: document.getElementById('user-menu'),
+            userEmail: document.getElementById('user-email-display'),
+            favList: document.getElementById('favorites-list'),
+            errorBanner: document.getElementById('error-banner'),
+            errorText: document.getElementById('error-text'),
+            errorTitle: document.getElementById('error-title'),
+            bgContainer: document.getElementById('bg-container'),
+            lightningFlash: document.getElementById('lightning-flash'),
+            forecastCanvas: document.getElementById('forecast-chart'),
+            liveClock: document.getElementById('live-clock'),
+            liveDate: document.getElementById('live-date'),
+            clothingText: document.getElementById('clothing-text'),
+            clothingIcon: document.getElementById('clothing-icon-container'),
+            moonText: document.getElementById('moon-phase-text'),
+            moonIllum: document.getElementById('moon-illumination'),
+            moonIcon: document.getElementById('moon-icon-container'),
+            fabVoice: document.getElementById('fab-mic'),
+            navInput: document.getElementById('nav-search-input')
+        };
+
+        // --- 3. ANIMATION SYSTEM ---
+        const weatherBackgrounds = {
+            'Sunny': 'https://images.unsplash.com/photo-1622396481328-9b1b78cdd9fd?q=80&w=2560',
+            'Clear': 'https://images.unsplash.com/photo-1601297183305-6df142704ea2?q=80&w=2560',
+            'Clear Night': 'https://images.unsplash.com/photo-1506318137071-a8bcbf6755dd?q=80&w=2560',
+            'Partly cloudy': 'https://images.unsplash.com/photo-1595867865334-a2952053a921?q=80&w=2560',
+            'Cloudy': 'https://images.unsplash.com/photo-1534088568595-a066f410bcda?q=80&w=2560',
+            'Overcast': 'https://images.unsplash.com/photo-1483702721041-bbb753b60f3e?q=80&w=2560',
+            'Mist': 'https://images.unsplash.com/photo-1585508889431-a1d0d9c5a324?q=80&w=2560',
+            'Fog': 'https://images.unsplash.com/photo-1487621167305-5d248087c724?q=80&w=2560',
+            'Rain': 'https://images.unsplash.com/photo-1428592953211-077101b2021b?q=80&w=2560',
+            'Snow': 'https://images.unsplash.com/photo-1477601263568-180e2c6d046e?q=80&w=2560',
+            'Thunder': 'https://images.unsplash.com/photo-1605727216801-e27ce1d0cc28?q=80&w=2560'
+        };
+
+        let currentBgUrl = '';
+
+        function updateBackground(conditionText, isDay) {
+            let bgUrl = weatherBackgrounds['Cloudy'];
+            const text = conditionText.toLowerCase();
+
+            if (text.includes('sunny')) bgUrl = weatherBackgrounds['Sunny'];
+            else if (text.includes('clear')) bgUrl = isDay ? weatherBackgrounds['Clear'] : weatherBackgrounds['Clear Night'];
+            else if (text.includes('partly')) bgUrl = weatherBackgrounds['Partly cloudy'];
+            else if (text.includes('cloud') || text.includes('overcast')) bgUrl = weatherBackgrounds['Cloudy'];
+            else if (text.includes('fog') || text.includes('mist')) bgUrl = weatherBackgrounds['Mist'];
+            else if (text.includes('rain') || text.includes('drizzle')) bgUrl = weatherBackgrounds['Rain'];
+            else if (text.includes('snow') || text.includes('ice') || text.includes('blizzard')) bgUrl = weatherBackgrounds['Snow'];
+            else if (text.includes('thunder') || text.includes('lightning')) bgUrl = weatherBackgrounds['Thunder'];
+
+            if (bgUrl === currentBgUrl) return;
+            currentBgUrl = bgUrl;
+
+            const img = new Image();
+            img.src = bgUrl;
+            img.onload = () => {
+                const newLayer = document.createElement('div');
+                newLayer.className = 'bg-layer ken-burns';
+                newLayer.style.backgroundImage = `url('${bgUrl}')`;
+                els.bgContainer.appendChild(newLayer);
+                void newLayer.offsetWidth; 
+                newLayer.classList.add('active');
+                setTimeout(() => {
+                    const layers = Array.from(els.bgContainer.getElementsByClassName('bg-layer'));
+                    if (layers.length > 1) {
+                        for(let i=0; i<layers.length-1; i++) layers[i].remove();
+                    }
+                }, 1500);
+            };
+            updateParticles(text, isDay);
+        }
+
+        // --- PARTICLE SYSTEM ---
+        const canvas = document.getElementById('weather-canvas');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+        let animationId;
+        let activeEffect = 'none';
+        let lightningInterval = null;
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        class Particle {
+            constructor(type) { this.type = type; this.reset(); }
+            reset() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                if (this.type === 'rain') {
+                    this.speedY = Math.random() * 15 + 10;
+                    this.length = Math.random() * 20 + 10;
+                    this.thickness = Math.random() * 2 + 1;
+                    this.y = Math.random() * -canvas.height;
+                } else if (this.type === 'snow') {
+                    this.speedY = Math.random() * 2 + 0.5;
+                    this.speedX = Math.random() * 1 - 0.5;
+                    this.size = Math.random() * 3 + 1;
+                    this.y = Math.random() * -canvas.height;
+                } else if (this.type === 'stars') {
+                    this.size = Math.random() * 2;
+                    this.alpha = Math.random();
+                    this.fadeSpeed = Math.random() * 0.02 + 0.005;
+                    this.fadingOut = Math.random() > 0.5;
+                }
+            }
+            update() {
+                if (this.type === 'rain') {
+                    this.y += this.speedY;
+                    if (this.y > canvas.height) this.y = -this.length;
+                } else if (this.type === 'snow') {
+                    this.y += this.speedY;
+                    this.x += this.speedX;
+                    if (this.y > canvas.height) this.y = -5;
+                } else if (this.type === 'stars') {
+                    if (this.fadingOut) {
+                        this.alpha -= this.fadeSpeed;
+                        if (this.alpha <= 0) { this.alpha = 0; this.fadingOut = false; }
+                    } else {
+                        this.alpha += this.fadeSpeed;
+                        if (this.alpha >= 1) { this.alpha = 1; this.fadingOut = true; }
+                    }
+                }
+            }
+            draw() {
+                if (this.type === 'rain') {
+                    ctx.beginPath();
+                    ctx.moveTo(this.x, this.y);
+                    ctx.lineTo(this.x, this.y + this.length);
+                    ctx.strokeStyle = 'rgba(174, 194, 224, 0.6)';
+                    ctx.lineWidth = this.thickness;
+                    ctx.lineCap = 'round';
+                    ctx.stroke();
+                } else if (this.type === 'snow') {
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                    ctx.fill();
+                } else if (this.type === 'stars') {
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(255, 255, 255, ${this.alpha})`;
+                    ctx.fill();
+                }
+            }
+        }
+
+        function initParticles(type, count) {
+            particles = [];
+            for (let i = 0; i < count; i++) particles.push(new Particle(type));
+        }
+
+        function animateParticles() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            particles.forEach(p => { p.update(); p.draw(); });
+            animationId = requestAnimationFrame(animateParticles);
+        }
+
+        function triggerLightning() {
+            const flash = els.lightningFlash;
+            flash.style.opacity = (Math.random() * 0.4 + 0.1).toString();
+            setTimeout(() => {
+                flash.style.opacity = '0';
+                if(Math.random() > 0.7) {
+                    setTimeout(() => {
+                        flash.style.opacity = (Math.random() * 0.4 + 0.1).toString();
+                        setTimeout(() => flash.style.opacity = '0', 100);
+                    }, 150);
+                }
+            }, 150);
+        }
+
+        function updateParticles(conditionText, isDay) {
+            cancelAnimationFrame(animationId);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if(lightningInterval) clearInterval(lightningInterval);
+            lightningInterval = null;
+
+            let newEffect = 'none';
+            if (conditionText.includes('rain') || conditionText.includes('drizzle') || conditionText.includes('shower')) newEffect = 'rain';
+            else if (conditionText.includes('snow') || conditionText.includes('ice') || conditionText.includes('blizzard')) newEffect = 'snow';
+            else if (!isDay && (conditionText.includes('clear') || conditionText.includes('fair'))) newEffect = 'stars';
+            
+            if (conditionText.includes('thunder') || conditionText.includes('lightning')) {
+                newEffect = 'rain';
+                lightningInterval = setInterval(triggerLightning, 5000 + Math.random() * 4000);
+            }
+
+            activeEffect = newEffect;
+            if (activeEffect === 'rain') { initParticles('rain', 150); animateParticles(); } 
+            else if (activeEffect === 'snow') { initParticles('snow', 100); animateParticles(); } 
+            else if (activeEffect === 'stars') { initParticles('stars', 120); animateParticles(); }
+        }
+
+        // --- 4. AUTHENTICATION (Rule 3 Compliant) ---
+        const initAuth = async () => {
+            if (useMock) {
+                const savedUser = localStorage.getItem('sa_current_user');
+                if (savedUser) {
+                    currentUser = JSON.parse(savedUser);
+                    showApp();
+                } else {
+                    showLanding();
+                }
+            } else {
+                // Ensure auth completes first
+                try {
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        // In some environments, auto-anon sign in is preferred
+                        // await signInAnonymously(auth);
+                    }
+                } catch(e) { console.log("Auth init flow check", e); }
+
+                onAuthStateChanged(auth, (user) => {
+                    currentUser = user;
+                    if (user) {
+                        showApp();
+                    } else {
+                        showLanding();
+                    }
+                });
+            }
+        };
+        initAuth();
+
+        function showApp() {
+            els.landingPage.classList.add('hidden');
+            els.appInterface.classList.remove('hidden');
+            updateUserProfileUI();
+            loadFavorites();
+            if (!currentWeatherData) fetchWeather('London');
+        }
+
+        function showLanding() {
+            els.appInterface.classList.add('hidden');
+            els.landingPage.classList.remove('hidden');
+        }
+
+        function updateUserProfileUI() {
+            const email = currentUser.email || 'User';
+            const name = currentUser.displayName || email.split('@')[0];
+            const initial = name.charAt(0).toUpperCase();
+
+            els.userEmail.textContent = name;
+            document.getElementById('nav-avatar').textContent = initial;
+            document.getElementById('profile-avatar-lg').textContent = initial;
+            document.getElementById('dropdown-email').textContent = email;
+            document.getElementById('profile-name-display').textContent = name;
+            document.getElementById('profile-email-display').textContent = email;
+        }
+
+        // --- MOCK DB ---
+        const getMockUsersDB = () => JSON.parse(localStorage.getItem('sa_mock_users_db') || '{}');
+        const saveMockUsersDB = (db) => localStorage.setItem('sa_mock_users_db', JSON.stringify(db));
+
+        async function mockSignup(name, email, password) {
+            const db = getMockUsersDB();
+            if (db[email]) throw new Error("Email is already registered.");
+            const newUser = { uid: 'uid-' + Date.now(), email, displayName: name, password };
+            db[email] = newUser;
+            saveMockUsersDB(db);
+            currentUser = newUser;
+            localStorage.setItem('sa_current_user', JSON.stringify(currentUser));
+            showApp();
+            closeModal('signup-modal');
+        }
+
+        async function mockLogin(email, password) {
+            const db = getMockUsersDB();
+            const user = db[email];
+            if (!user) throw new Error("User not found. Please sign up.");
+            if (user.password !== password) throw new Error("Incorrect password.");
+            currentUser = user;
+            localStorage.setItem('sa_current_user', JSON.stringify(currentUser));
+            showApp();
+            closeModal('login-modal');
+        }
+
+        async function mockLogout() {
+            currentUser = null;
+            localStorage.removeItem('sa_current_user');
+            showLanding();
+            document.getElementById('profile-dropdown').classList.add('hidden');
+        }
+
+        // --- AUTH HANDLERS ---
+        const showError = (elementId, msg) => {
+            const el = document.getElementById(elementId);
+            el.textContent = msg;
+            el.classList.remove('hidden');
+            setTimeout(() => el.classList.add('hidden'), 5000);
+        };
+
+        document.getElementById('signup-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('signup-name').value;
+            const email = document.getElementById('signup-email').value;
+            const pass = document.getElementById('signup-pass').value;
+            const confirm = document.getElementById('signup-confirm').value;
+
+            if (pass !== confirm) { showError('signup-error', "Passwords do not match!"); return; }
+
+            if (useMock) {
+                try { await mockSignup(name, email, pass); } catch (err) { showError('signup-error', err.message); }
+            } else {
+                try {
+                    const cred = await createUserWithEmailAndPassword(auth, email, pass);
+                    await updateProfile(cred.user, { displayName: name });
+                    closeModal('signup-modal');
+                } catch (err) { showError('signup-error', err.message.replace('Firebase:', '').trim()); }
+            }
+        });
+
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('login-email').value;
+            const pass = document.getElementById('login-password').value;
+
+            if (useMock) {
+                try { await mockLogin(email, pass); } catch (err) { showError('login-error', err.message); }
+            } else {
+                try {
+                    await signInWithEmailAndPassword(auth, email, pass);
+                    closeModal('login-modal');
+                } catch (err) { showError('login-error', "Invalid email or password."); }
+            }
+        });
+
+        window.handleLogout = async () => { 
+            if (useMock) await mockLogout();
+            else await signOut(auth); 
+            document.getElementById('profile-dropdown').classList.add('hidden'); 
+        };
+
+        // --- 5. WEATHER LOGIC ---
+        window.getUserLocation = () => {
+            if (navigator.geolocation) {
+                const icon = document.querySelector('.fa-location-crosshairs');
+                icon.classList.add('fa-spin');
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const { latitude, longitude } = position.coords;
+                        fetchWeather(`${latitude},${longitude}`);
+                        icon.classList.remove('fa-spin');
+                    },
+                    (error) => {
+                        console.error(error);
+                        alert("Could not get location. Check permissions.");
+                        icon.classList.remove('fa-spin');
+                    }
+                );
+            } else { alert("Geolocation not supported."); }
+        };
+
+        async function fetchWeather(query, isRetry = false) {
+            els.location.textContent = "Loading...";
+            els.errorBanner.classList.add('hidden');
+            
+            try {
+                let data;
+                if (settings.mode === 'proxy') {
+                    // Check for localhost/https mismatch
+                    if (window.location.protocol === 'https:' && settings.backendUrl.includes('http://')) {
+                        console.warn("Mixed content warning: Client is HTTPS, Backend is HTTP.");
+                    }
+                    const res = await fetch(`${settings.backendUrl}/weather?location=${encodeURIComponent(query)}&aqi=yes&alerts=yes`);
+                    if (!res.ok) throw new Error(`Server Error: ${res.status}`);
+                    data = await res.json();
+                } else {
+                    const key = settings.apiKey || '6c52cf1143b14faab16172745251110'; 
+                    const url = `https://api.weatherapi.com/v1/forecast.json?key=${key}&q=${encodeURIComponent(query)}&days=7&aqi=yes&alerts=yes`;
+                    const res = await fetch(url);
+                    if (!res.ok) throw new Error("API Error: " + res.status);
+                    data = await res.json();
+                }
+
+                currentWeatherData = data;
+                renderWeather(data);
+                checkIfFavorite(data.location.name);
+
+            } catch (err) {
+                console.error(err);
+                if (settings.mode === 'proxy' && !isRetry) {
+                    console.warn("Proxy failed. Auto-switch to Direct Mode.");
+                    settings.mode = 'direct';
+                    localStorage.setItem('sa_mode_v2', 'direct');
+                    document.getElementById('api-mode').value = 'direct';
+                    toggleSettingsFields();
+                    fetchWeather(query, true); 
+                    return;
+                }
+                els.location.textContent = "Error";
+                els.errorText.textContent = err.message;
+                els.errorTitle.textContent = "Weather Fetch Failed";
+                els.errorBanner.classList.remove('hidden');
+            }
+        }
+
+        function getSmartAdvice(tempC, condition, uv, windKph) {
+            const cond = condition.toLowerCase();
+            if (cond.includes('rain')) return "Bring an umbrella! ☔";
+            if (cond.includes('snow')) return "Bundle up! ❄️";
+            if (uv > 6) return "High UV! Wear sunscreen. 🕶️";
+            if (windKph > 40) return "Very windy! 💨";
+            if (tempC < 5) return "It's freezing! 🧥";
+            if (tempC > 30) return "It's hot! 💧";
+            return "Enjoy your day! ☀️";
+        }
+        
+        function updateInsight() {
+             if (!currentWeatherData) return;
+             const { current } = currentWeatherData;
+             els.smartText.textContent = getSmartAdvice(current.temp_c, current.condition.text, current.uv, current.wind_kph);
+        }
+
+        window.shareWeather = () => {
+             if (!currentWeatherData) return;
+             const text = `Weather in ${currentWeatherData.location.name}: ${currentWeatherData.current.temp_c}°C. Sky Alert.`;
+             // Navigator clipboard often blocked in iframe, try/catch
+             try {
+                navigator.clipboard.writeText(text).then(() => alert("Copied to clipboard!"));
+             } catch(e) { 
+                 const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); document.execCommand("copy"); document.body.removeChild(t); alert("Copied!");
+             }
+        };
+
+        // --- 7. ADVANCED DASHBOARD ---
+        window.startVoiceSearch = () => {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) { alert("Voice search not supported."); return; }
+            
+            const recognition = new SpeechRecognition();
+            recognition.lang = 'en-US';
+            
+            recognition.onstart = () => { 
+                // Animate both FAB and input
+                els.fabVoice.classList.add('mic-listening');
+                els.navInput.placeholder = "Listening..."; 
+                els.navInput.focus();
+            };
+            
+            recognition.onend = () => { 
+                els.fabVoice.classList.remove('mic-listening');
+                els.navInput.placeholder = "Search city..."; 
+            };
+            
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                els.navInput.value = transcript;
+                fetchWeather(transcript);
+            };
+            
+            recognition.start();
+        };
+
+        function updateForecastChart(hourlyData) {
+            if(!els.forecastCanvas) return;
+            const ctx = els.forecastCanvas.getContext('2d');
+            const next24 = hourlyData.slice(0, 24);
+            const labels = next24.map(h => h.time.split(' ')[1]);
+            const temps = next24.map(h => isCelsius ? h.temp_c : h.temp_f);
+            
+            if (weatherChartInstance) weatherChartInstance.destroy();
+
+            const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+            gradient.addColorStop(0, 'rgba(100, 255, 218, 0.4)');
+            gradient.addColorStop(1, 'rgba(100, 255, 218, 0.0)');
+
+            weatherChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: isCelsius ? 'Temp' : 'Temp',
+                        data: temps,
+                        borderColor: '#64ffda',
+                        backgroundColor: gradient,
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { x: { display: false }, y: { display: false } }
+                }
+            });
+        }
+
+        function startLocalClock(timeZoneId) {
+            if (clockInterval) clearInterval(clockInterval);
+            function update() {
+                try {
+                    const now = new Date();
+                    const timeString = new Intl.DateTimeFormat('en-US', { timeZone: timeZoneId, hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(now);
+                    const dateString = new Intl.DateTimeFormat('en-US', { timeZone: timeZoneId, weekday: 'long', month: 'short', day: 'numeric' }).format(now);
+                    els.liveClock.textContent = timeString;
+                    els.liveDate.textContent = dateString;
+                } catch (e) { els.liveClock.textContent = "--:--:--"; }
+            }
+            update();
+            clockInterval = setInterval(update, 1000);
+        }
+
+        function updateClothing(tempC, conditionText, isRaining) {
+            let iconClass = "fa-shirt", text = "Comfortable clothing.";
+            if (isRaining) { iconClass = "fa-umbrella"; text = "Rain gear required!"; }
+            else if (tempC < 10) { iconClass = "fa-mitten"; text = "Coat required."; }
+            else if (tempC > 25) { iconClass = "fa-shirt"; text = "Shorts & T-shirt."; }
+            els.clothingText.textContent = text;
+            els.clothingIcon.innerHTML = `<i class="fa-solid ${iconClass}"></i>`;
+        }
+
+        window.speakWeather = () => {
+            if (!currentWeatherData) return;
+            const text = `Weather in ${currentWeatherData.location.name}. ${currentWeatherData.current.condition.text}, ${currentWeatherData.current.temp_c} degrees.`;
+            const u = new SpeechSynthesisUtterance(text);
+            window.speechSynthesis.speak(u);
+        };
+
+        window.exportCSV = () => {
+            if (!currentWeatherData) return;
+            const { location, current } = currentWeatherData;
+            const csv = `Location,Temp(C),Condition\n${location.name},${current.temp_c},${current.condition.text}`;
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            if (link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", "weather.csv");
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        };
+
+        function renderWeather(data) {
+            const current = data.current;
+            const loc = data.location;
+            const forecast = data.forecast.forecastday;
+
+            // Improved Location Display
+            let locationText = loc.name;
+            if (loc.region) locationText += `, ${loc.region}`;
+            locationText += `, ${loc.country}`;
+            els.location.textContent = locationText;
+
+            els.date.textContent = loc.localtime;
+            els.temp.textContent = isCelsius ? `${Math.round(current.temp_c)}°` : `${Math.round(current.temp_f)}°`;
+            els.condition.textContent = current.condition.text;
+            els.icon.src = `https:${current.condition.icon}`.replace('64x64', '128x128');
+
+            updateBackground(current.condition.text, current.is_day);
+
+            els.wind.textContent = `${current.wind_kph} km/h`;
+            els.humidity.textContent = `${current.humidity}%`;
+            els.feelsLike.textContent = isCelsius ? `${Math.round(current.feelslike_c)}°` : `${Math.round(current.feelslike_f)}°`;
+            els.uv.textContent = current.uv;
+            els.pressure.textContent = `${current.pressure_mb} mb`;
+            els.visibility.textContent = `${current.vis_km} km`;
+            
+            updateInsight();
+
+            els.sunrise.textContent = forecast[0].astro.sunrise;
+            els.sunset.textContent = forecast[0].astro.sunset;
+            
+            // AQI Logic
+            if(current.air_quality) {
+               const epa = current.air_quality['us-epa-index'];
+               els.aqiVal.textContent = epa;
+               const colors = ['bg-green-400', 'bg-green-400', 'bg-yellow-400', 'bg-orange-400', 'bg-red-500', 'bg-purple-500'];
+               const labels = ['Unknown', 'Good', 'Moderate', 'Unhealthy for Sens.', 'Unhealthy', 'Hazardous'];
+               const idx = Math.min(epa, 5);
+               els.aqiStatus.textContent = labels[idx];
+               els.aqiBar.className = `h-full ${colors[idx]} transition-all duration-1000`;
+               els.aqiBar.style.width = `${(epa/6)*100}%`;
+            }
+
+            const hours = forecast[0].hour;
+            els.hourly.innerHTML = hours.map(h => `
+                <div class="snap-start flex-shrink-0 w-24 glass-panel rounded-xl p-3 text-center flex flex-col items-center gap-2">
+                    <span class="text-xs text-gray-400">${h.time.split(' ')[1]}</span>
+                    <img src="https:${h.condition.icon}" class="w-8 h-8">
+                    <span class="font-bold">${isCelsius ? Math.round(h.temp_c) : Math.round(h.temp_f)}°</span>
+                </div>
+            `).join('');
+
+            els.daily.innerHTML = forecast.map(day => `
+                <div class="glass-panel rounded-xl p-4 flex items-center justify-between">
+                    <span class="font-bold text-sm">${new Date(day.date).toLocaleDateString(undefined, {weekday: 'short'})}</span>
+                    <img src="https:${day.day.condition.icon}" class="w-8 h-8">
+                    <div class="text-right">
+                        <span class="block font-bold">${isCelsius ? Math.round(day.day.maxtemp_c) : Math.round(day.day.maxtemp_f)}°</span>
+                        <span class="block text-xs text-gray-500">${isCelsius ? Math.round(day.day.mintemp_c) : Math.round(day.day.mintemp_f)}°</span>
+                    </div>
+                </div>
+            `).join('');
+
+            updateForecastChart(hours);
+            startLocalClock(loc.tz_id);
+            updateClothing(current.temp_c, current.condition.text, forecast[0].day.daily_will_it_rain);
+            
+            els.moonText.textContent = forecast[0].astro.moon_phase;
+            els.moonIllum.textContent = `${forecast[0].astro.moon_illumination}%`;
+        }
+
+        // --- FAVORITES (Firestore) ---
+        function checkIfFavorite(cityName) {
+            if (!currentUser) { els.saveBtn.classList.remove('text-red-500'); return; }
+            // Wait for fav list to load or check existing
+            const found = document.querySelector(`.fav-item[data-city="${cityName}"]`);
+            if (found) els.saveBtn.classList.add('text-red-500');
+            else els.saveBtn.classList.remove('text-red-500');
+        }
+
+        window.toggleFavorite = async () => {
+            if (!currentUser) { openModal('login-modal'); return; }
+            if (!currentWeatherData) return;
+            const city = currentWeatherData.location.name;
+            const country = currentWeatherData.location.country;
+            const docId = city.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+            if (useMock) {
+                const favs = JSON.parse(localStorage.getItem('sa_favorites_db') || '{}');
+                if (!favs[currentUser.email]) favs[currentUser.email] = {};
+                
+                if (favs[currentUser.email][docId]) {
+                    delete favs[currentUser.email][docId];
+                    els.saveBtn.classList.remove('text-red-500');
+                } else {
+                    favs[currentUser.email][docId] = { name: city, country };
+                    els.saveBtn.classList.add('text-red-500');
+                }
+                localStorage.setItem('sa_favorites_db', JSON.stringify(favs));
+                loadFavorites();
+                return;
+            }
+
+            const favRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'favorites', docId);
+            try {
+                const snap = await getDoc(favRef);
+                if (snap.exists()) {
+                    await deleteDoc(favRef);
+                    els.saveBtn.classList.remove('text-red-500');
+                } else {
+                    await setDoc(favRef, { name: city, country, savedAt: serverTimestamp() });
+                    els.saveBtn.classList.add('text-red-500');
+                }
+            } catch(e) { console.error(e); }
+        };
+
+        function loadFavorites() {
+            if (!currentUser) return;
+            if (useMock) {
+                const allFavs = JSON.parse(localStorage.getItem('sa_favorites_db') || '{}');
+                const favs = Object.values(allFavs[currentUser.email] || {});
+                renderFavorites(favs);
+                return;
+            }
+            onSnapshot(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'favorites'), (snap) => {
+                const favs = [];
+                snap.forEach(d => favs.push(d.data()));
+                renderFavorites(favs);
+            });
+        }
+
+        function renderFavorites(favs) {
+            document.getElementById('fav-count').textContent = `${favs.length} Cities`;
+            if (favs.length === 0) {
+                els.favList.innerHTML = '<p class="text-gray-500 col-span-2 text-center py-8">No saved locations.</p>';
+            } else {
+                els.favList.innerHTML = favs.map(f => `
+                    <div class="glass-panel p-3 rounded-lg flex justify-between items-center cursor-pointer hover:bg-[#233554] fav-item" data-city="${f.name}" onclick="window.fetchCity('${f.name}')">
+                        <div><h4 class="font-bold text-white">${f.name}</h4><p class="text-xs text-gray-400">${f.country}</p></div>
+                        <button onclick="event.stopPropagation(); window.deleteFav('${f.name}')" class="text-gray-500 hover:text-red-400"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                `).join('');
+            }
+            if(currentWeatherData) checkIfFavorite(currentWeatherData.location.name);
+        }
+
+        window.fetchCity = (city) => { fetchWeather(city); closeModal('profile-modal'); };
+        window.deleteFav = async (city) => {
+             const docId = city.toLowerCase().replace(/[^a-z0-9]/g, '');
+             if (useMock) { 
+                 // Mock delete logic handled in toggleFavorite actually, but specific delete here
+                 const favs = JSON.parse(localStorage.getItem('sa_favorites_db') || '{}');
+                 if(favs[currentUser.email]) delete favs[currentUser.email][docId];
+                 localStorage.setItem('sa_favorites_db', JSON.stringify(favs));
+                 loadFavorites();
+                 return; 
+             }
+             await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'favorites', docId));
+        };
+
+        // --- LISTENERS ---
+        els.navSearch.addEventListener('submit', (e) => { e.preventDefault(); const v = document.getElementById('nav-search-input').value; if(v) fetchWeather(v); });
+        els.mobileSearch.addEventListener('submit', (e) => { e.preventDefault(); const v = document.getElementById('mobile-search-input').value; if(v) fetchWeather(v); });
+        document.getElementById('unit-toggle').addEventListener('change', (e) => { isCelsius = !e.target.checked; if(currentWeatherData) renderWeather(currentWeatherData); });
+
+        window.openModal = (id) => document.getElementById(id).classList.remove('hidden');
+        window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
+        window.openProfile = () => { document.getElementById('profile-dropdown').classList.add('hidden'); openModal('profile-modal'); };
+        window.openSettings = () => {
+            document.getElementById('profile-dropdown').classList.add('hidden');
+            document.getElementById('api-mode').value = settings.mode;
+            document.getElementById('backend-url').value = settings.backendUrl;
+            document.getElementById('direct-api-key').value = settings.apiKey;
+            toggleSettingsFields();
+            openModal('settings-modal');
+        };
+        window.toggleProfileDropdown = () => document.getElementById('profile-dropdown').classList.toggle('hidden');
+
+        document.getElementById('api-mode').addEventListener('change', toggleSettingsFields);
+        function toggleSettingsFields() {
+            const mode = document.getElementById('api-mode').value;
+            if (mode === 'proxy') {
+                document.getElementById('proxy-settings').classList.remove('hidden');
+                document.getElementById('direct-settings').classList.add('hidden');
+            } else {
+                document.getElementById('proxy-settings').classList.add('hidden');
+                document.getElementById('direct-settings').classList.remove('hidden');
+            }
+        }
+        toggleSettingsFields();
+
+        window.saveSettings = () => {
+            settings.mode = document.getElementById('api-mode').value;
+            settings.backendUrl = document.getElementById('backend-url').value;
+            settings.apiKey = document.getElementById('direct-api-key').value;
+            localStorage.setItem('sa_mode_v2', settings.mode);
+            localStorage.setItem('sa_backend_v2', settings.backendUrl);
+            localStorage.setItem('sa_key', settings.apiKey);
+            closeModal('settings-modal');
+            fetchWeather(els.location.textContent.split(',')[0] || 'London');
+        };
+
+        // --- INTRO ANIMATION LOGIC ---
+        window.addEventListener('DOMContentLoaded', () => {
+            // Determine how long the animation plays (3.5 seconds total)
+            const introDuration = 3500; 
+            
+            const overlay = document.getElementById('intro-overlay');
+            
+            setTimeout(() => {
+                // 1. Fade out the overlay
+                overlay.classList.add('finished');
+                
+                // 2. Trigger the landing page entrance animations manually (optional, adds polish)
+                const landingContent = document.querySelector('#landing-page .glass-panel');
+                if(landingContent) {
+                    landingContent.classList.remove('animate-fade-in-up'); // Reset
+                    void landingContent.offsetWidth; // Trigger reflow
+                    landingContent.classList.add('animate-fade-in-up'); // Replay
+                }
+                
+            }, introDuration);
+        });
+    </script>
+</body>
+</html>
