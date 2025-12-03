@@ -22,12 +22,16 @@ The application features a proprietary **Particle Engine** for real-time atmosph
 FRONT PAGE : <img width="1919" height="866" alt="Screenshot 2025-12-03 230714" src="https://github.com/user-attachments/assets/f604e31a-7d4c-4916-b102-4969efc1100a" />
 
 
-SIGN UP PAGE: <img width="523" height="760" alt="Screenshot 2025-12-03 231102" src="https://github.com/user-attachments/assets/3c429e50-63c9-4a8a-bfaf-28f9fda6f506" />
+SIGN UP PAGE: 
+
+<img width="523" height="760" alt="Screenshot 2025-12-03 231102" src="https://github.com/user-attachments/assets/3c429e50-63c9-4a8a-bfaf-28f9fda6f506" />
 
 
 
 
-LOGIN PAGE: <img width="523" height="587" alt="Screenshot 2025-12-03 231157" src="https://github.com/user-attachments/assets/aea9dba4-482c-47cc-b07c-37957f5ef187" />
+LOGIN PAGE: 
+
+<img width="523" height="587" alt="Screenshot 2025-12-03 231157" src="https://github.com/user-attachments/assets/aea9dba4-482c-47cc-b07c-37957f5ef187" />
 
 
 
