@@ -34,6 +34,15 @@ LOGIN PAGE:
 <img width="523" height="587" alt="Screenshot 2025-12-03 231157" src="https://github.com/user-attachments/assets/aea9dba4-482c-47cc-b07c-37957f5ef187" />
 
 
+MAIN WEBSITE:
+
+<img width="1918" height="858" alt="Screenshot 2025-12-03 231256" src="https://github.com/user-attachments/assets/a3a97205-fb7b-42cf-975d-023a74db5f43" />
+
+ADVANCED DASHBOARD:
+
+<img width="1570" height="703" alt="Screenshot 2025-12-03 231627" src="https://github.com/user-attachments/assets/db441893-f38f-41f8-ab2a-252813f971d6" />
+
+
 
 ## ✨ Key Features
 
